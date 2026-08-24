@@ -5,9 +5,9 @@ import time
 import json
 from pathlib import Path
 from contextlib import asynccontextmanager
-from balancer import LoadBalancer
-from health import start_health_checker
-from metrics import MetricsCollector
+from .balancer import LoadBalancer
+from .health import start_health_checker
+from .metrics import MetricsCollector
 
 # Load config
 with open(Path(__file__).parent.parent / "config" / "backends.json") as f:

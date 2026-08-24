@@ -30,10 +30,8 @@ class LoadBalancer:
         healthy = self.get_healthy()
         if not healthy:
             return None
-
         if self.algorithm == "least_connections":
             return min(healthy, key=lambda b: b.active_connections)
-
         # default: round-robin
         with self._lock:
             for _ in range(len(self.backends)):

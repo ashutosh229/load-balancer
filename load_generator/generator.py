@@ -34,7 +34,6 @@ async def run_load(target: str, concurrency: int, duration: int = 30):
     total = len(results)
     success = sum(1 for r in results if r["ok"])
     rps = total / duration
-
     summary = {
         "target": target,
         "concurrency": concurrency,

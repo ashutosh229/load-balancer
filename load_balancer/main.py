@@ -60,7 +60,6 @@ async def proxy(request: Request, path: str):
         elapsed = (time.perf_counter() - start) * 1000  # ms
         metrics.record(backend.id, elapsed, resp.status_code, success)
         lb.mark_request_end(backend, success)
-
         return Response(
             content=resp.content,
             status_code=resp.status_code,

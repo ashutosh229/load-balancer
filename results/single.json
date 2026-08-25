@@ -1,0 +1,14 @@
+{
+  "target": "http://10.1.75.79:3205/",
+  "concurrency": 100,
+  "duration": 60,
+  "total_requests": 2735,
+  "successful": 2735,
+  "failed": 0,
+  "error_rate": 0.0,
+  "rps": 45.583333333333336,
+  "latency_avg_ms": 2238.7701198903105,
+  "latency_p50_ms": 2250.4412000000684,
+  "latency_p95_ms": 2670.431339999959,
+  "latency_p99_ms": 3126.3780080000647
+}

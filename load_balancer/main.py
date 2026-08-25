@@ -44,63 +44,21 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Messaging Load Balancer", lifespan=lifespan)
 
 
-# ----------------------------------------------------------------------
-# HTTP reverse proxy (your original code, kept almost unchanged)
-# ----------------------------------------------------------------------
-@app.api_route(
-    "/{path:path}",
-    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
-)
-async def proxy(request: Request, path: str):
-    backend = lb.select()
-    if backend is None:
-        raise HTTPException(status_code=503, detail="No healthy backends")
+# ------------------------------------------------------------------
+# LB management endpoints  ← MUST be registered FIRST
+# ------------------------------------------------------------------
+@app.get("/lb/health")
+async def lb_health():
+    return {
+        "status": "ok",
+        "healthy_backends": [b.id for b in lb.get_healthy()],
+        "algorithm": lb.algorithm,
+    }
 
-    target = f"{backend.url}/{path}"
-    if request.url.query:
-        target += f"?{request.url.query}"
 
-    headers = dict(request.headers)
-    headers.pop("host", None)  # let httpx set the correct Host
-
-    body = await request.body()
-    start = time.perf_counter()
-    lb.mark_request_start(backend)
-
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.request(
-                method=request.method,
-                url=target,
-                headers=headers,
-                content=body,
-            )
-        success = 200 <= resp.status_code < 500
-        elapsed = (time.perf_counter() - start) * 1000  # ms
-        metrics.record(backend.id, elapsed, resp.status_code, success)
-        lb.mark_request_end(backend, success)
-
-        # Filter hop-by-hop headers
-        excluded = {
-            "content-encoding",
-            "content-length",
-            "transfer-encoding",
-            "connection",
-        }
-        response_headers = {
-            k: v for k, v in resp.headers.items() if k.lower() not in excluded
-        }
-
-        return Response(
-            content=resp.content,
-            status_code=resp.status_code,
-            headers=response_headers,
-            media_type=resp.headers.get("content-type"),
-        )
-    except Exception as e:
-        lb.mark_request_end(backend, success=False)
-        metrics.record(backend.id, (time.perf_counter() - start) * 1000, 502, False)
-        raise HTTPException(status_code=502, detail=str(e))
+@app.get("/lb/metrics")
+async def get_metrics():
+    return metrics.snapshot(lb)
 
 
 # ----------------------------------------------------------------------
@@ -169,17 +127,59 @@ async def websocket_proxy(client_ws: WebSocket):
 
 
 # ----------------------------------------------------------------------
-# LB management endpoints
+# HTTP reverse proxy (your original code, kept almost unchanged)
 # ----------------------------------------------------------------------
-@app.get("/lb/health")
-async def lb_health():
-    return {
-        "status": "ok",
-        "healthy_backends": [b.id for b in lb.get_healthy()],
-        "algorithm": lb.algorithm,
-    }
+@app.api_route(
+    "/{path:path}",
+    methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
+)
+async def proxy(request: Request, path: str):
+    backend = lb.select()
+    if backend is None:
+        raise HTTPException(status_code=503, detail="No healthy backends")
 
+    target = f"{backend.url}/{path}"
+    if request.url.query:
+        target += f"?{request.url.query}"
 
-@app.get("/lb/metrics")
-async def get_metrics():
-    return metrics.snapshot(lb)
+    headers = dict(request.headers)
+    headers.pop("host", None)  # let httpx set the correct Host
+
+    body = await request.body()
+    start = time.perf_counter()
+    lb.mark_request_start(backend)
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.request(
+                method=request.method,
+                url=target,
+                headers=headers,
+                content=body,
+            )
+        success = 200 <= resp.status_code < 500
+        elapsed = (time.perf_counter() - start) * 1000  # ms
+        metrics.record(backend.id, elapsed, resp.status_code, success)
+        lb.mark_request_end(backend, success)
+
+        # Filter hop-by-hop headers
+        excluded = {
+            "content-encoding",
+            "content-length",
+            "transfer-encoding",
+            "connection",
+        }
+        response_headers = {
+            k: v for k, v in resp.headers.items() if k.lower() not in excluded
+        }
+
+        return Response(
+            content=resp.content,
+            status_code=resp.status_code,
+            headers=response_headers,
+            media_type=resp.headers.get("content-type"),
+        )
+    except Exception as e:
+        lb.mark_request_end(backend, success=False)
+        metrics.record(backend.id, (time.perf_counter() - start) * 1000, 502, False)
+        raise HTTPException(status_code=502, detail=str(e))

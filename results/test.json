@@ -1,0 +1,14 @@
+{
+  "target": "http://10.1.75.79:3205/lb/metrics",
+  "concurrency": 1,
+  "duration": 5,
+  "total_requests": 3,
+  "successful": 0,
+  "failed": 3,
+  "error_rate": 1.0,
+  "rps": 0.6,
+  "latency_avg_ms": null,
+  "latency_p50_ms": null,
+  "latency_p95_ms": null,
+  "latency_p99_ms": null
+}

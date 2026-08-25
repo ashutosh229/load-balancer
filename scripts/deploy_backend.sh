@@ -4,28 +4,31 @@
 # Usage:
 #   ./scripts/deploy_backend.sh <ssh_port> <app_port> [backend_repo_path]
 #
-# Example (Sys2):
-#   ./scripts/deploy_backend.sh 2206 3206 ~/messaging-backend
+# Examples (your allocation):
+#   ./scripts/deploy_backend.sh 2206 3206
+#   ./scripts/deploy_backend.sh 2207 3207
+#   ./scripts/deploy_backend.sh 2208 3208
 #
 # Notes:
 #   - SSH host is fixed to 10.1.75.79 (lab assignment).
-#   - Application port = SSH port + 1000 * AppNumber (App1 → +1000).
-#   - The backend itself is the messaging app from the previous lab;
-#     this script only starts it on the correct port.
+#   - Default backend path: ~/lab_assignments/lab4/group-chat-application
+#   - Start command matches your lab:  python app.py
+#   - Port is passed via PORT environment variable (and --port if supported).
 
 set -euo pipefail
 
 if [[ $# -lt 2 ]]; then
     echo "Usage: $0 <ssh_port> <app_port> [backend_repo_path]"
-    echo "  e.g. $0 2206 3206 ~/messaging-backend"
+    echo "  e.g. $0 2206 3206"
+    echo "  e.g. $0 2206 3206 ~/lab_assignments/lab4/group-chat-application"
     exit 1
 fi
 
 SSH_PORT="$1"
 APP_PORT="$2"
-BACKEND_PATH="${3:-~/messaging-backend}"
+BACKEND_PATH="${3:-~/lab_assignments/lab4/group-chat-application}"
 SSH_HOST="10.1.75.79"
-SSH_USER="${SSH_USER:-student}"   # override if your lab username differs
+SSH_USER="${SSH_USER:-student}"
 
 echo "=============================================="
 echo "  Deploy messaging backend"
@@ -34,8 +37,6 @@ echo "  App port: ${APP_PORT}"
 echo "  Backend path: ${BACKEND_PATH}"
 echo "=============================================="
 
-# Start (or restart) the FastAPI messaging backend on the remote container.
-# Adjust the start command to match your previous-lab backend entrypoint.
 ssh -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" bash -s <<EOF
 set -euo pipefail
 cd ${BACKEND_PATH}
@@ -55,12 +56,26 @@ elif command -v lsof &>/dev/null; then
     [[ -n "\$pid" ]] && kill \$pid 2>/dev/null || true
 fi
 
-# Start the messaging backend (adjust module path if needed)
-nohup uvicorn main:app --host 0.0.0.0 --port ${APP_PORT} \
+# Also stop any previous group-chat process we started
+if [[ -f /tmp/messaging-backend-${APP_PORT}.pid ]]; then
+    old_pid=\$(cat /tmp/messaging-backend-${APP_PORT}.pid)
+    kill "\$old_pid" 2>/dev/null || true
+    rm -f /tmp/messaging-backend-${APP_PORT}.pid
+fi
+
+# Start the messaging backend the same way you do manually:
+#   python app.py
+# Port is supplied via PORT env var (common pattern). If your app.py
+# ignores PORT and hard-codes a port, edit app.py to read:
+#   port = int(os.environ.get("PORT", 5000))
+export PORT=${APP_PORT}
+nohup python app.py \
     > /tmp/messaging-backend-${APP_PORT}.log 2>&1 &
 echo \$! > /tmp/messaging-backend-${APP_PORT}.pid
 echo "Backend started on port ${APP_PORT} (PID \$(cat /tmp/messaging-backend-${APP_PORT}.pid))"
+echo "Log: /tmp/messaging-backend-${APP_PORT}.log"
 EOF
 
-echo "Done. Health check (from this machine):"
-echo "  curl -s http://${SSH_HOST}:${APP_PORT}/health || true"
+echo "Done. Verify with:"
+echo "  curl -s http://${SSH_HOST}:${APP_PORT}/health || curl -s http://${SSH_HOST}:${APP_PORT}/"
+echo "  ssh -p ${SSH_PORT} ${SSH_USER}@${SSH_HOST} 'tail -20 /tmp/messaging-backend-${APP_PORT}.log'"
